@@ -1,0 +1,49 @@
+#Shared environment variables in .env file
+workspace:
+  base: /go
+  path: src/github.com/uniontsai/johnnyfive
+
+pipeline:
+  dependencies: 
+    image: dt665m/go-glide:1.9.0
+    commands:
+      - glide install
+
+  tests: 
+    image: dt665m/go-glide:1.9.0
+    pull: true
+    commands:
+      - go test -v -cover $(glide novendor)
+      - mkdir -p artifacts/logs/
+      - echo $(go test  -v -cover) > artifacts/logs/tests.txt
+      
+  build:
+    image: dt665m/go-glide:1.9.0
+    pull: true
+    commands:
+      - sh .drone.sh
+
+  publish_artifacts_gcs:
+    image: wyattjoh/drone-gcs
+    pull: true
+    acl: private
+    bucket: uniontsai-artifacts
+    source: artifacts/**/*
+    strip_prefix: artifacts/
+    target: /${DRONE_REPO_NAME}/${DRONE_BUILD_NUMBER}
+    secrets: 
+      - source: google_credentials
+        target: google_application_credentials_contents
+    when:
+      event: [ push, tag, pull_request ]
+
+  publish_image_gcr:
+    image: plugins/gcr
+    pull: true
+    repo: tsaiunion/${DRONE_REPO_NAME}
+    tags: ${DRONE_TAG}
+    environment:
+      - PLUGIN_DOCKERFILE=Dockerfile
+    secrets: [google_credentials]
+    when:
+      event: [ push, tag ]
